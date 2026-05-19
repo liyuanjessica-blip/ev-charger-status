@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -16,7 +15,7 @@ export default async function handler(req, res) {
     const response = await fetch(process.env.SLACK_WEBHOOK_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({payload：{ message: message }}),
+      body: JSON.stringify({ payload: { message: message } }),
     });
 
     if (!response.ok) throw new Error(`Slack error: ${response.status}`);
