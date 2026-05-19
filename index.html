@@ -169,13 +169,13 @@
 
     // ─── Charging View ────────────────────────────────────────────────────────
     function ChargerView({ charger, state, onDone, onBack }) {
-      const [elapsed, setElapsed] = useState(getElapsed(state.startTime));
+      const [elapsed, setElapsed] = useState(getElapsed(state?.startTime || 0));
       const [animating, setAnimating] = useState(false);
 
       useEffect(() => {
-        const interval = setInterval(() => setElapsed(getElapsed(state.startTime)), 1000);
+        const interval = setInterval(() => setElapsed(getElapsed(state?.startTime || 0)), 1000);
         return () => clearInterval(interval);
-      }, [state.startTime]);
+      }, [state?.startTime]);
 
       const handleDone = () => { setAnimating(true); setTimeout(() => setAnimating(false), 500); onDone(); };
 
@@ -270,7 +270,7 @@
                     </div>
                   )}
                   <div style={{ display:"flex", gap:"6px", marginTop:"auto" }}>
-                    <button onClick={() => onSelect(charger.id)} disabled={status!=="available"} style={{ flex:1, padding:"7px 0", borderRadius:"8px", border:"none", cursor:status==="available"?"pointer":"not-allowed", fontSize:"10px", fontFamily:"inherit", fontWeight:"600", letterSpacing:"0.1em", textTransform:"uppercase", background:status==="available"?"linear-gradient(135deg, #00d278, #00a85f)":"rgba(255,255,255,0.05)", color:status==="available"?"#001a0d":"rgba(255,255,255,0.2)", transition:"all 0.2s ease" }}>Use</button>
+                    <button onClick={() => onSelect(charger.id)} disabled={status==="fault"} style={{ flex:1, padding:"7px 0", borderRadius:"8px", border:"none", cursor:status==="fault"?"not-allowed":"pointer", fontSize:"10px", fontFamily:"inherit", fontWeight:"600", letterSpacing:"0.1em", textTransform:"uppercase", background:status==="available"?"linear-gradient(135deg, #00d278, #00a85f)":status==="occupied"?"linear-gradient(135deg, #ffaf00, #ff8800)":"rgba(255,255,255,0.05)", color:status==="available"?"#001a0d":status==="occupied"?"#1a0e00":"rgba(255,255,255,0.2)", transition:"all 0.2s ease" }}>{status==="occupied"?"View ▶":"Use"}</button>
                     <button onClick={() => onToggleFault(charger.id)} disabled={status==="occupied"} title={status==="fault"?"Mark as fixed":"Mark as fault"} style={{ padding:"7px 10px", borderRadius:"8px", border:`1px solid ${status==="fault"?"rgba(255,60,60,0.4)":"rgba(255,255,255,0.1)"}`, cursor:status==="occupied"?"not-allowed":"pointer", background:status==="fault"?"rgba(255,60,60,0.12)":"rgba(255,255,255,0.04)", color:status==="fault"?"#ff3c3c":"rgba(255,255,255,0.3)", display:"flex", alignItems:"center", justifyContent:"center", transition:"all 0.2s ease", opacity:status==="occupied"?0.3:1 }}>
                       <WrenchIcon size={13}/>
                     </button>
