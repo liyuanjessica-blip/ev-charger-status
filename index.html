@@ -10,28 +10,41 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #050a08; }
-    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500;600&display=swap');
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.35} }
     @keyframes pulse-red {
       0%,100%{ box-shadow: 0 0 0 0 rgba(255,60,60,0.2); }
       50%{     box-shadow: 0 0 0 10px rgba(255,60,60,0); }
     }
     input::placeholder { color: rgba(255,255,255,0.2); }
+    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500;600&display=swap');
   </style>
 </head>
 <body>
   <div id="root"></div>
-
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useCallback } = React;
 
-    // ─── Config ───────────────────────────────────────────────────────────────
     const CHARGERS = [
       { id: "CHG-001", label: "Charger 1" },
       { id: "CHG-002", label: "Charger 2" },
       { id: "CHG-003", label: "Charger 3" },
       { id: "CHG-004", label: "Charger 4" },
     ];
+
+    // ─── API helpers ──────────────────────────────────────────────────────────
+    async function fetchState() {
+      const res = await fetch("/api/state");
+      return res.json();
+    }
+
+    async function updateState(id, status, userName = null) {
+      const res = await fetch("/api/state", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status, userName }),
+      });
+      return res.json();
+    }
 
     async function sendSlack(message) {
       try {
@@ -40,9 +53,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message }),
         });
-      } catch (e) {
-        console.error("[Slack]", e);
-      }
+      } catch (e) { console.error("[Slack]", e); }
     }
 
     function formatTime(secs) {
@@ -52,7 +63,11 @@
       return h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
     }
 
-    // Read charger id from URL: ?charger=CHG-001
+    function getElapsed(startTime) {
+      if (!startTime) return 0;
+      return Math.floor((Date.now() - startTime) / 1000);
+    }
+
     function getChargerFromURL() {
       const params = new URLSearchParams(window.location.search);
       return params.get("charger");
@@ -101,60 +116,23 @@
     // ─── Out of Service ───────────────────────────────────────────────────────
     function OutOfServiceView({ charger, onBack }) {
       return (
-        <div style={{
-          minHeight: "100vh",
-          background: "radial-gradient(ellipse at 50% -10%, #1a0505 0%, #080808 65%)",
-          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-          fontFamily: "'DM Mono', monospace", padding: "24px",
-          position: "relative", overflow: "hidden",
-        }}>
-          <div style={{
-            position: "absolute", top: "-80px", left: "50%", transform: "translateX(-50%)",
-            width: "500px", height: "500px", borderRadius: "50%", pointerEvents: "none",
-            background: "radial-gradient(circle, rgba(255,60,60,0.12) 0%, transparent 65%)",
-          }} />
-          <button onClick={onBack} style={{
-            position: "absolute", top: "20px", left: "20px",
-            display: "flex", alignItems: "center", gap: "6px",
-            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: "8px", padding: "7px 12px", cursor: "pointer",
-            color: "rgba(255,255,255,0.45)", fontSize: "12px", fontFamily: "inherit", letterSpacing: "0.06em",
-          }}>
+        <div style={{ minHeight:"100vh", background:"radial-gradient(ellipse at 50% -10%, #1a0505 0%, #080808 65%)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", fontFamily:"'DM Mono', monospace", padding:"24px", position:"relative", overflow:"hidden" }}>
+          <div style={{ position:"absolute", top:"-80px", left:"50%", transform:"translateX(-50%)", width:"500px", height:"500px", borderRadius:"50%", pointerEvents:"none", background:"radial-gradient(circle, rgba(255,60,60,0.12) 0%, transparent 65%)" }} />
+          <button onClick={onBack} style={{ position:"absolute", top:"20px", left:"20px", display:"flex", alignItems:"center", gap:"6px", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:"8px", padding:"7px 12px", cursor:"pointer", color:"rgba(255,255,255,0.45)", fontSize:"12px", fontFamily:"inherit", letterSpacing:"0.06em" }}>
             <ArrowLeft /> Dashboard
           </button>
-          <div style={{
-            width: "100%", maxWidth: "340px", background: "rgba(255,255,255,0.03)",
-            border: "1px solid rgba(255,60,60,0.3)", borderRadius: "20px", padding: "36px 26px",
-            backdropFilter: "blur(10px)", boxShadow: "0 0 60px rgba(255,60,60,0.1)", textAlign: "center",
-          }}>
-            <div style={{
-              display: "inline-flex", alignItems: "center", justifyContent: "center",
-              width: "64px", height: "64px", borderRadius: "50%",
-              background: "rgba(255,60,60,0.1)", border: "1px solid rgba(255,60,60,0.25)",
-              color: "#ff3c3c", marginBottom: "20px", animation: "pulse-red 2s ease-in-out infinite",
-            }}>
+          <div style={{ width:"100%", maxWidth:"340px", background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,60,60,0.3)", borderRadius:"20px", padding:"36px 26px", backdropFilter:"blur(10px)", boxShadow:"0 0 60px rgba(255,60,60,0.1)", textAlign:"center" }}>
+            <div style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:"64px", height:"64px", borderRadius:"50%", background:"rgba(255,60,60,0.1)", border:"1px solid rgba(255,60,60,0.25)", color:"#ff3c3c", marginBottom:"20px", animation:"pulse-red 2s ease-in-out infinite" }}>
               <AlertIcon size={28} />
             </div>
-            <div style={{ fontSize: "10px", letterSpacing: "0.2em", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", marginBottom: "6px" }}>
-              {charger.id}
+            <div style={{ fontSize:"10px", letterSpacing:"0.2em", color:"rgba(255,255,255,0.3)", textTransform:"uppercase", marginBottom:"6px" }}>{charger.id}</div>
+            <div style={{ fontSize:"22px", fontWeight:"600", color:"rgba(255,255,255,0.88)", letterSpacing:"0.04em", marginBottom:"8px" }}>{charger.label}</div>
+            <div style={{ display:"inline-flex", alignItems:"center", gap:"7px", background:"rgba(255,60,60,0.1)", border:"1px solid rgba(255,60,60,0.3)", borderRadius:"100px", padding:"5px 14px", marginBottom:"24px" }}>
+              <span style={{ width:"6px", height:"6px", borderRadius:"50%", background:"#ff3c3c", boxShadow:"0 0 7px #ff3c3c", animation:"blink 1.4s ease-in-out infinite" }} />
+              <span style={{ fontSize:"11px", letterSpacing:"0.12em", fontWeight:"600", textTransform:"uppercase", color:"#ff3c3c" }}>Out of Service</span>
             </div>
-            <div style={{ fontSize: "22px", fontWeight: "600", color: "rgba(255,255,255,0.88)", letterSpacing: "0.04em", marginBottom: "8px" }}>
-              {charger.label}
-            </div>
-            <div style={{
-              display: "inline-flex", alignItems: "center", gap: "7px",
-              background: "rgba(255,60,60,0.1)", border: "1px solid rgba(255,60,60,0.3)",
-              borderRadius: "100px", padding: "5px 14px", marginBottom: "24px",
-            }}>
-              <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#ff3c3c", boxShadow: "0 0 7px #ff3c3c", animation: "blink 1.4s ease-in-out infinite" }} />
-              <span style={{ fontSize: "11px", letterSpacing: "0.12em", fontWeight: "600", textTransform: "uppercase", color: "#ff3c3c" }}>Out of Service</span>
-            </div>
-            <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.4)", lineHeight: "1.7", marginBottom: "8px" }}>
-              This charger is currently unavailable due to a fault.
-            </div>
-            <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.25)", lineHeight: "1.6" }}>
-              Please use another charger or contact your office admin.
-            </div>
+            <div style={{ fontSize:"13px", color:"rgba(255,255,255,0.4)", lineHeight:"1.7", marginBottom:"8px" }}>This charger is currently unavailable due to a fault.</div>
+            <div style={{ fontSize:"12px", color:"rgba(255,255,255,0.25)", lineHeight:"1.6" }}>Please use another charger or contact your office admin.</div>
           </div>
         </div>
       );
@@ -164,68 +142,24 @@
     function NameEntry({ charger, onConfirm }) {
       const [name, setName] = useState("");
       return (
-        <div style={{
-          minHeight: "100vh",
-          background: "radial-gradient(ellipse at 40% -10%, #001a10 0%, #050b0a 65%)",
-          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-          fontFamily: "'DM Mono', monospace", padding: "24px",
-          position: "relative", overflow: "hidden",
-        }}>
-          <div style={{
-            position: "absolute", top: "-80px", left: "50%", transform: "translateX(-50%)",
-            width: "500px", height: "500px", borderRadius: "50%", pointerEvents: "none",
-            background: "radial-gradient(circle, rgba(0,210,120,0.08) 0%, transparent 65%)",
-          }} />
-          <div style={{
-            width: "100%", maxWidth: "340px", background: "rgba(255,255,255,0.04)",
-            border: "1px solid rgba(0,210,120,0.15)", borderRadius: "20px", padding: "32px 26px",
-            backdropFilter: "blur(10px)", boxShadow: "0 0 50px rgba(0,210,120,0.07)",
-          }}>
-            <div style={{ marginBottom: "28px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                <span style={{ color: "#00d278" }}><BoltIcon size={24} /></span>
-                <span style={{ fontSize: "10px", letterSpacing: "0.2em", color: "rgba(255,255,255,0.3)", textTransform: "uppercase" }}>EV Charger</span>
+        <div style={{ minHeight:"100vh", background:"radial-gradient(ellipse at 40% -10%, #001a10 0%, #050b0a 65%)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", fontFamily:"'DM Mono', monospace", padding:"24px", position:"relative", overflow:"hidden" }}>
+          <div style={{ position:"absolute", top:"-80px", left:"50%", transform:"translateX(-50%)", width:"500px", height:"500px", borderRadius:"50%", pointerEvents:"none", background:"radial-gradient(circle, rgba(0,210,120,0.08) 0%, transparent 65%)" }} />
+          <div style={{ width:"100%", maxWidth:"340px", background:"rgba(255,255,255,0.04)", border:"1px solid rgba(0,210,120,0.15)", borderRadius:"20px", padding:"32px 26px", backdropFilter:"blur(10px)", boxShadow:"0 0 50px rgba(0,210,120,0.07)" }}>
+            <div style={{ marginBottom:"28px" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"4px" }}>
+                <span style={{ color:"#00d278" }}><BoltIcon size={24} /></span>
+                <span style={{ fontSize:"10px", letterSpacing:"0.2em", color:"rgba(255,255,255,0.3)", textTransform:"uppercase" }}>EV Charger</span>
               </div>
-              <div style={{ fontSize: "22px", fontWeight: "600", color: "rgba(255,255,255,0.88)", letterSpacing: "0.04em" }}>{charger.label}</div>
-              <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.2)", marginTop: "2px" }}>{charger.id}</div>
+              <div style={{ fontSize:"22px", fontWeight:"600", color:"rgba(255,255,255,0.88)", letterSpacing:"0.04em" }}>{charger.label}</div>
+              <div style={{ fontSize:"11px", color:"rgba(255,255,255,0.2)", marginTop:"2px" }}>{charger.id}</div>
             </div>
-            <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.55)", marginBottom: "16px", lineHeight: "1.5" }}>
-              Enter your name to start charging
+            <div style={{ fontSize:"13px", color:"rgba(255,255,255,0.55)", marginBottom:"16px", lineHeight:"1.5" }}>Enter your name to start charging</div>
+            <div style={{ display:"flex", alignItems:"center", gap:"10px", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(0,210,120,0.2)", borderRadius:"12px", padding:"12px 14px", marginBottom:"16px" }}>
+              <span style={{ color:"rgba(0,210,120,0.6)", flexShrink:0 }}><UserIcon /></span>
+              <input autoFocus value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === "Enter" && name.trim() && onConfirm(name.trim())} placeholder="Your name..."
+                style={{ background:"none", border:"none", outline:"none", color:"rgba(255,255,255,0.85)", fontSize:"14px", fontFamily:"inherit", width:"100%", letterSpacing:"0.04em" }} />
             </div>
-            <div style={{
-              display: "flex", alignItems: "center", gap: "10px",
-              background: "rgba(255,255,255,0.05)", border: "1px solid rgba(0,210,120,0.2)",
-              borderRadius: "12px", padding: "12px 14px", marginBottom: "16px",
-            }}>
-              <span style={{ color: "rgba(0,210,120,0.6)", flexShrink: 0 }}><UserIcon /></span>
-              <input
-                autoFocus
-                value={name}
-                onChange={e => setName(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && name.trim() && onConfirm(name.trim())}
-                placeholder="Your name..."
-                style={{
-                  background: "none", border: "none", outline: "none",
-                  color: "rgba(255,255,255,0.85)", fontSize: "14px",
-                  fontFamily: "inherit", width: "100%", letterSpacing: "0.04em",
-                }}
-              />
-            </div>
-            <button
-              onClick={() => name.trim() && onConfirm(name.trim())}
-              disabled={!name.trim()}
-              style={{
-                width: "100%", padding: "14px", borderRadius: "12px", border: "none",
-                cursor: name.trim() ? "pointer" : "not-allowed",
-                fontSize: "13px", fontFamily: "inherit", fontWeight: "600",
-                letterSpacing: "0.12em", textTransform: "uppercase",
-                background: name.trim() ? "linear-gradient(135deg, #00d278, #00a85f)" : "rgba(255,255,255,0.07)",
-                color: name.trim() ? "#001a0d" : "rgba(255,255,255,0.2)",
-                boxShadow: name.trim() ? "0 4px 22px rgba(0,210,120,0.26)" : "none",
-                transition: "all 0.25s ease",
-                display: "flex", alignItems: "center", justifyContent: "center", gap: "7px",
-              }}
-            >
+            <button onClick={() => name.trim() && onConfirm(name.trim())} disabled={!name.trim()} style={{ width:"100%", padding:"14px", borderRadius:"12px", border:"none", cursor:name.trim()?"pointer":"not-allowed", fontSize:"13px", fontFamily:"inherit", fontWeight:"600", letterSpacing:"0.12em", textTransform:"uppercase", background:name.trim()?"linear-gradient(135deg, #00d278, #00a85f)":"rgba(255,255,255,0.07)", color:name.trim()?"#001a0d":"rgba(255,255,255,0.2)", boxShadow:name.trim()?"0 4px 22px rgba(0,210,120,0.26)":"none", transition:"all 0.25s ease", display:"flex", alignItems:"center", justifyContent:"center", gap:"7px" }}>
               <BoltIcon size={15} /> Start Charging
             </button>
           </div>
@@ -235,77 +169,44 @@
 
     // ─── Charging View ────────────────────────────────────────────────────────
     function ChargerView({ charger, state, onDone, onBack }) {
-      const { elapsed, userName } = state;
+      const [elapsed, setElapsed] = useState(getElapsed(state.startTime));
       const [animating, setAnimating] = useState(false);
+
+      useEffect(() => {
+        const interval = setInterval(() => setElapsed(getElapsed(state.startTime)), 1000);
+        return () => clearInterval(interval);
+      }, [state.startTime]);
+
       const handleDone = () => { setAnimating(true); setTimeout(() => setAnimating(false), 500); onDone(); };
+
       return (
-        <div style={{
-          minHeight: "100vh",
-          background: "radial-gradient(ellipse at 60% -10%, #1c1500 0%, #080808 65%)",
-          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-          fontFamily: "'DM Mono', monospace", padding: "24px",
-          position: "relative", overflow: "hidden",
-        }}>
-          <div style={{
-            position: "absolute", top: "-80px", left: "50%", transform: "translateX(-50%)",
-            width: "500px", height: "500px", borderRadius: "50%", pointerEvents: "none",
-            background: "radial-gradient(circle, rgba(255,175,0,0.13) 0%, transparent 65%)",
-          }} />
-          <button onClick={onBack} style={{
-            position: "absolute", top: "20px", left: "20px",
-            display: "flex", alignItems: "center", gap: "6px",
-            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: "8px", padding: "7px 12px", cursor: "pointer",
-            color: "rgba(255,255,255,0.45)", fontSize: "12px", fontFamily: "inherit", letterSpacing: "0.06em",
-          }}>
+        <div style={{ minHeight:"100vh", background:"radial-gradient(ellipse at 60% -10%, #1c1500 0%, #080808 65%)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", fontFamily:"'DM Mono', monospace", padding:"24px", position:"relative", overflow:"hidden" }}>
+          <div style={{ position:"absolute", top:"-80px", left:"50%", transform:"translateX(-50%)", width:"500px", height:"500px", borderRadius:"50%", pointerEvents:"none", background:"radial-gradient(circle, rgba(255,175,0,0.13) 0%, transparent 65%)" }} />
+          <button onClick={onBack} style={{ position:"absolute", top:"20px", left:"20px", display:"flex", alignItems:"center", gap:"6px", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:"8px", padding:"7px 12px", cursor:"pointer", color:"rgba(255,255,255,0.45)", fontSize:"12px", fontFamily:"inherit", letterSpacing:"0.06em" }}>
             <ArrowLeft /> Dashboard
           </button>
-          <div style={{
-            width: "100%", maxWidth: "340px", background: "rgba(255,255,255,0.04)",
-            border: "1px solid rgba(255,175,0,0.22)", borderRadius: "20px", padding: "32px 26px",
-            backdropFilter: "blur(10px)", boxShadow: "0 0 50px rgba(255,175,0,0.1)",
-          }}>
-            <div style={{ marginBottom: "22px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                <span style={{ color: "#ffaf00" }}><BoltIcon size={26} /></span>
-                <span style={{ fontSize: "10px", letterSpacing: "0.2em", color: "rgba(255,255,255,0.3)", textTransform: "uppercase" }}>EV Charger</span>
+          <div style={{ width:"100%", maxWidth:"340px", background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,175,0,0.22)", borderRadius:"20px", padding:"32px 26px", backdropFilter:"blur(10px)", boxShadow:"0 0 50px rgba(255,175,0,0.1)" }}>
+            <div style={{ marginBottom:"22px" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"4px" }}>
+                <span style={{ color:"#ffaf00" }}><BoltIcon size={26} /></span>
+                <span style={{ fontSize:"10px", letterSpacing:"0.2em", color:"rgba(255,255,255,0.3)", textTransform:"uppercase" }}>EV Charger</span>
               </div>
-              <div style={{ fontSize: "24px", fontWeight: "600", color: "rgba(255,255,255,0.88)", letterSpacing: "0.05em" }}>{charger.label}</div>
-              <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.2)", marginTop: "2px" }}>{charger.id}</div>
+              <div style={{ fontSize:"24px", fontWeight:"600", color:"rgba(255,255,255,0.88)", letterSpacing:"0.05em" }}>{charger.label}</div>
+              <div style={{ fontSize:"11px", color:"rgba(255,255,255,0.2)", marginTop:"2px" }}>{charger.id}</div>
             </div>
-            <div style={{
-              display: "flex", alignItems: "center", gap: "8px",
-              background: "rgba(255,175,0,0.07)", border: "1px solid rgba(255,175,0,0.15)",
-              borderRadius: "10px", padding: "9px 13px", marginBottom: "20px",
-            }}>
-              <span style={{ color: "rgba(255,175,0,0.7)" }}><UserIcon /></span>
-              <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.75)", letterSpacing: "0.04em" }}>{userName}</span>
+            <div style={{ display:"flex", alignItems:"center", gap:"8px", background:"rgba(255,175,0,0.07)", border:"1px solid rgba(255,175,0,0.15)", borderRadius:"10px", padding:"9px 13px", marginBottom:"20px" }}>
+              <span style={{ color:"rgba(255,175,0,0.7)" }}><UserIcon /></span>
+              <span style={{ fontSize:"13px", color:"rgba(255,255,255,0.75)", letterSpacing:"0.04em" }}>{state.userName}</span>
             </div>
-            <div style={{
-              display: "inline-flex", alignItems: "center", gap: "7px",
-              background: "rgba(255,175,0,0.1)", border: "1px solid rgba(255,175,0,0.28)",
-              borderRadius: "100px", padding: "5px 13px", marginBottom: "24px",
-            }}>
-              <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#ffaf00", boxShadow: "0 0 7px #ffaf00", animation: "blink 1.4s ease-in-out infinite" }} />
-              <span style={{ fontSize: "11px", letterSpacing: "0.12em", fontWeight: "600", textTransform: "uppercase", color: "#ffaf00" }}>Occupied</span>
+            <div style={{ display:"inline-flex", alignItems:"center", gap:"7px", background:"rgba(255,175,0,0.1)", border:"1px solid rgba(255,175,0,0.28)", borderRadius:"100px", padding:"5px 13px", marginBottom:"24px" }}>
+              <span style={{ width:"6px", height:"6px", borderRadius:"50%", background:"#ffaf00", boxShadow:"0 0 7px #ffaf00", animation:"blink 1.4s ease-in-out infinite" }} />
+              <span style={{ fontSize:"11px", letterSpacing:"0.12em", fontWeight:"600", textTransform:"uppercase", color:"#ffaf00" }}>Occupied</span>
             </div>
-            <div style={{
-              textAlign: "center", marginBottom: "24px", padding: "14px",
-              background: "rgba(255,175,0,0.05)", borderRadius: "12px", border: "1px solid rgba(255,175,0,0.1)",
-            }}>
-              <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.28)", letterSpacing: "0.18em", marginBottom: "3px" }}>CHARGING TIME</div>
-              <div style={{ fontSize: "34px", color: "#ffaf00", letterSpacing: "0.08em", fontWeight: "300" }}>{formatTime(elapsed)}</div>
+            <div style={{ textAlign:"center", marginBottom:"24px", padding:"14px", background:"rgba(255,175,0,0.05)", borderRadius:"12px", border:"1px solid rgba(255,175,0,0.1)" }}>
+              <div style={{ fontSize:"10px", color:"rgba(255,255,255,0.28)", letterSpacing:"0.18em", marginBottom:"3px" }}>CHARGING TIME</div>
+              <div style={{ fontSize:"34px", color:"#ffaf00", letterSpacing:"0.08em", fontWeight:"300" }}>{formatTime(elapsed)}</div>
             </div>
-            <button onClick={handleDone} style={{
-              width: "100%", padding: "15px", borderRadius: "12px", border: "none",
-              cursor: "pointer", fontSize: "13px", fontFamily: "inherit", fontWeight: "600",
-              letterSpacing: "0.12em", textTransform: "uppercase",
-              background: "linear-gradient(135deg, #ffaf00, #ff8800)", color: "#1a0e00",
-              boxShadow: "0 4px 22px rgba(255,175,0,0.32)",
-              transform: animating ? "scale(0.96)" : "scale(1)",
-              transition: "all 0.28s cubic-bezier(0.34, 1.56, 0.64, 1)",
-              display: "flex", alignItems: "center", justifyContent: "center", gap: "7px",
-            }}>
+            <button onClick={handleDone} style={{ width:"100%", padding:"15px", borderRadius:"12px", border:"none", cursor:"pointer", fontSize:"13px", fontFamily:"inherit", fontWeight:"600", letterSpacing:"0.12em", textTransform:"uppercase", background:"linear-gradient(135deg, #ffaf00, #ff8800)", color:"#1a0e00", boxShadow:"0 4px 22px rgba(255,175,0,0.32)", transform:animating?"scale(0.96)":"scale(1)", transition:"all 0.28s cubic-bezier(0.34, 1.56, 0.64, 1)", display:"flex", alignItems:"center", justifyContent:"center", gap:"7px" }}>
               <CheckIcon size={16} /> Done Charging
             </button>
           </div>
@@ -314,107 +215,65 @@
     }
 
     // ─── Dashboard ────────────────────────────────────────────────────────────
-    function Dashboard({ chargerStates, onSelect, onToggleFault, log }) {
-      const available = CHARGERS.filter(c => chargerStates[c.id].status === "available").length;
+    function Dashboard({ states, onSelect, onToggleFault, log }) {
+      const available = CHARGERS.filter(c => states[c.id]?.status === "available").length;
       const statusColor = (status) => {
-        if (status === "occupied") return { dot: "#ffaf00", border: "rgba(255,175,0,0.25)", glow: "rgba(255,175,0,0.06)" };
-        if (status === "fault")    return { dot: "#ff3c3c", border: "rgba(255,60,60,0.3)",  glow: "rgba(255,60,60,0.06)"  };
-        return                            { dot: "#00d278", border: "rgba(0,210,120,0.15)", glow: "rgba(0,210,120,0.04)"  };
+        if (status === "occupied") return { dot:"#ffaf00", border:"rgba(255,175,0,0.25)", glow:"rgba(255,175,0,0.06)" };
+        if (status === "fault")    return { dot:"#ff3c3c", border:"rgba(255,60,60,0.3)",  glow:"rgba(255,60,60,0.06)"  };
+        return                            { dot:"#00d278", border:"rgba(0,210,120,0.15)", glow:"rgba(0,210,120,0.04)"  };
       };
       return (
-        <div style={{
-          minHeight: "100vh",
-          background: "radial-gradient(ellipse at 50% -20%, #0a1a12 0%, #050a08 70%)",
-          fontFamily: "'DM Mono', monospace", padding: "32px 20px", color: "white",
-        }}>
-          <div style={{ maxWidth: "480px", margin: "0 auto 28px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+        <div style={{ minHeight:"100vh", background:"radial-gradient(ellipse at 50% -20%, #0a1a12 0%, #050a08 70%)", fontFamily:"'DM Mono', monospace", padding:"32px 20px", color:"white" }}>
+          <div style={{ maxWidth:"480px", margin:"0 auto 28px" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"6px" }}>
               <BoltIcon size={22} />
-              <span style={{ fontSize: "10px", letterSpacing: "0.22em", color: "rgba(255,255,255,0.35)", textTransform: "uppercase" }}>Office EV Chargers</span>
+              <span style={{ fontSize:"10px", letterSpacing:"0.22em", color:"rgba(255,255,255,0.35)", textTransform:"uppercase" }}>Office EV Chargers</span>
             </div>
-            <div style={{ fontSize: "22px", fontWeight: "600", color: "rgba(255,255,255,0.88)", letterSpacing: "0.03em" }}>Dashboard</div>
-            <div style={{
-              display: "inline-flex", alignItems: "center", gap: "6px", marginTop: "10px",
-              background: available > 0 ? "rgba(0,210,120,0.09)" : "rgba(255,100,80,0.09)",
-              border: `1px solid ${available > 0 ? "rgba(0,210,120,0.2)" : "rgba(255,100,80,0.2)"}`,
-              borderRadius: "100px", padding: "4px 12px",
-            }}>
-              <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: available > 0 ? "#00d278" : "#ff6450", animation: "blink 1.4s ease-in-out infinite" }} />
-              <span style={{ fontSize: "11px", letterSpacing: "0.1em", color: available > 0 ? "#00d278" : "#ff6450" }}>
-                {available} / {CHARGERS.length} Available
-              </span>
+            <div style={{ fontSize:"22px", fontWeight:"600", color:"rgba(255,255,255,0.88)", letterSpacing:"0.03em" }}>Dashboard</div>
+            <div style={{ display:"inline-flex", alignItems:"center", gap:"6px", marginTop:"10px", background:available>0?"rgba(0,210,120,0.09)":"rgba(255,100,80,0.09)", border:`1px solid ${available>0?"rgba(0,210,120,0.2)":"rgba(255,100,80,0.2)"}`, borderRadius:"100px", padding:"4px 12px" }}>
+              <span style={{ width:"5px", height:"5px", borderRadius:"50%", background:available>0?"#00d278":"#ff6450", animation:"blink 1.4s ease-in-out infinite" }} />
+              <span style={{ fontSize:"11px", letterSpacing:"0.1em", color:available>0?"#00d278":"#ff6450" }}>{available} / {CHARGERS.length} Available</span>
             </div>
           </div>
 
-          <div style={{ maxWidth: "480px", margin: "0 auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "24px" }}>
+          <div style={{ maxWidth:"480px", margin:"0 auto", display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px", marginBottom:"24px" }}>
             {CHARGERS.map(charger => {
-              const state = chargerStates[charger.id];
+              const state = states[charger.id] || { status:"available" };
               const { status } = state;
               const colors = statusColor(status);
+              const elapsed = getElapsed(state.startTime);
               return (
-                <div key={charger.id} style={{
-                  background: "rgba(255,255,255,0.04)", border: `1px solid ${colors.border}`,
-                  borderRadius: "14px", padding: "16px", backdropFilter: "blur(8px)",
-                  boxShadow: `0 0 20px ${colors.glow}`, transition: "all 0.3s ease",
-                  display: "flex", flexDirection: "column",
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
-                    <span style={{ color: colors.dot }}>
-                      {status === "fault" ? <AlertIcon size={18} /> : <BoltIcon size={18} />}
-                    </span>
-                    <span style={{ width: "7px", height: "7px", borderRadius: "50%", flexShrink: 0, background: colors.dot, boxShadow: `0 0 8px ${colors.dot}`, animation: "blink 1.4s ease-in-out infinite" }} />
+                <div key={charger.id} style={{ background:"rgba(255,255,255,0.04)", border:`1px solid ${colors.border}`, borderRadius:"14px", padding:"16px", backdropFilter:"blur(8px)", boxShadow:`0 0 20px ${colors.glow}`, transition:"all 0.3s ease", display:"flex", flexDirection:"column" }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:"10px" }}>
+                    <span style={{ color:colors.dot }}>{status==="fault"?<AlertIcon size={18}/>:<BoltIcon size={18}/>}</span>
+                    <span style={{ width:"7px", height:"7px", borderRadius:"50%", flexShrink:0, background:colors.dot, boxShadow:`0 0 8px ${colors.dot}`, animation:"blink 1.4s ease-in-out infinite" }} />
                   </div>
-                  <div style={{ fontSize: "14px", fontWeight: "600", color: "rgba(255,255,255,0.85)", marginBottom: "2px", letterSpacing: "0.03em" }}>{charger.label}</div>
-                  <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.22)", letterSpacing: "0.08em", marginBottom: "10px" }}>{charger.id}</div>
-
-                  {status === "occupied" && (
-                    <div style={{ marginBottom: "10px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "5px", marginBottom: "5px" }}>
-                        <span style={{ color: "rgba(255,175,0,0.5)" }}><UserIcon size={12} /></span>
-                        <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.55)" }}>{state.userName}</span>
+                  <div style={{ fontSize:"14px", fontWeight:"600", color:"rgba(255,255,255,0.85)", marginBottom:"2px", letterSpacing:"0.03em" }}>{charger.label}</div>
+                  <div style={{ fontSize:"10px", color:"rgba(255,255,255,0.22)", letterSpacing:"0.08em", marginBottom:"10px" }}>{charger.id}</div>
+                  {status==="occupied" && (
+                    <div style={{ marginBottom:"10px" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:"5px", marginBottom:"5px" }}>
+                        <span style={{ color:"rgba(255,175,0,0.5)" }}><UserIcon size={12}/></span>
+                        <span style={{ fontSize:"11px", color:"rgba(255,255,255,0.55)" }}>{state.userName}</span>
                       </div>
-                      <div style={{ fontSize: "11px", color: "rgba(255,175,0,0.55)" }}>{formatTime(state.elapsed)}</div>
+                      <div style={{ fontSize:"11px", color:"rgba(255,175,0,0.55)" }}>{formatTime(elapsed)}</div>
                     </div>
                   )}
-                  {status === "available" && (
-                    <div style={{ display: "inline-flex", alignItems: "center", gap: "5px", background: "rgba(0,210,120,0.08)", borderRadius: "6px", padding: "3px 8px", marginBottom: "10px" }}>
-                      <span style={{ fontSize: "10px", letterSpacing: "0.1em", fontWeight: "600", textTransform: "uppercase", color: "#00d278" }}>Available</span>
+                  {status==="available" && (
+                    <div style={{ display:"inline-flex", alignItems:"center", gap:"5px", background:"rgba(0,210,120,0.08)", borderRadius:"6px", padding:"3px 8px", marginBottom:"10px" }}>
+                      <span style={{ fontSize:"10px", letterSpacing:"0.1em", fontWeight:"600", textTransform:"uppercase", color:"#00d278" }}>Available</span>
                     </div>
                   )}
-                  {status === "fault" && (
-                    <div style={{ display: "inline-flex", alignItems: "center", gap: "5px", background: "rgba(255,60,60,0.1)", borderRadius: "6px", padding: "3px 8px", marginBottom: "10px" }}>
-                      <span style={{ fontSize: "10px", letterSpacing: "0.1em", fontWeight: "600", textTransform: "uppercase", color: "#ff3c3c" }}>Fault</span>
+                  {status==="fault" && (
+                    <div style={{ display:"inline-flex", alignItems:"center", gap:"5px", background:"rgba(255,60,60,0.1)", borderRadius:"6px", padding:"3px 8px", marginBottom:"10px" }}>
+                      <span style={{ fontSize:"10px", letterSpacing:"0.1em", fontWeight:"600", textTransform:"uppercase", color:"#ff3c3c" }}>Fault</span>
                     </div>
                   )}
-
-                  <div style={{ display: "flex", gap: "6px", marginTop: "auto" }}>
-                    <button
-                      onClick={() => onSelect(charger.id)}
-                      disabled={status !== "available"}
-                      style={{
-                        flex: 1, padding: "7px 0", borderRadius: "8px", border: "none",
-                        cursor: status === "available" ? "pointer" : "not-allowed",
-                        fontSize: "10px", fontFamily: "inherit", fontWeight: "600",
-                        letterSpacing: "0.1em", textTransform: "uppercase",
-                        background: status === "available" ? "linear-gradient(135deg, #00d278, #00a85f)" : "rgba(255,255,255,0.05)",
-                        color: status === "available" ? "#001a0d" : "rgba(255,255,255,0.2)",
-                        transition: "all 0.2s ease",
-                      }}
-                    >Use</button>
-                    <button
-                      onClick={() => onToggleFault(charger.id)}
-                      disabled={status === "occupied"}
-                      title={status === "fault" ? "Mark as fixed" : "Mark as fault"}
-                      style={{
-                        padding: "7px 10px", borderRadius: "8px",
-                        border: `1px solid ${status === "fault" ? "rgba(255,60,60,0.4)" : "rgba(255,255,255,0.1)"}`,
-                        cursor: status === "occupied" ? "not-allowed" : "pointer",
-                        background: status === "fault" ? "rgba(255,60,60,0.12)" : "rgba(255,255,255,0.04)",
-                        color: status === "fault" ? "#ff3c3c" : "rgba(255,255,255,0.3)",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        transition: "all 0.2s ease", opacity: status === "occupied" ? 0.3 : 1,
-                      }}
-                    ><WrenchIcon size={13} /></button>
+                  <div style={{ display:"flex", gap:"6px", marginTop:"auto" }}>
+                    <button onClick={() => onSelect(charger.id)} disabled={status!=="available"} style={{ flex:1, padding:"7px 0", borderRadius:"8px", border:"none", cursor:status==="available"?"pointer":"not-allowed", fontSize:"10px", fontFamily:"inherit", fontWeight:"600", letterSpacing:"0.1em", textTransform:"uppercase", background:status==="available"?"linear-gradient(135deg, #00d278, #00a85f)":"rgba(255,255,255,0.05)", color:status==="available"?"#001a0d":"rgba(255,255,255,0.2)", transition:"all 0.2s ease" }}>Use</button>
+                    <button onClick={() => onToggleFault(charger.id)} disabled={status==="occupied"} title={status==="fault"?"Mark as fixed":"Mark as fault"} style={{ padding:"7px 10px", borderRadius:"8px", border:`1px solid ${status==="fault"?"rgba(255,60,60,0.4)":"rgba(255,255,255,0.1)"}`, cursor:status==="occupied"?"not-allowed":"pointer", background:status==="fault"?"rgba(255,60,60,0.12)":"rgba(255,255,255,0.04)", color:status==="fault"?"#ff3c3c":"rgba(255,255,255,0.3)", display:"flex", alignItems:"center", justifyContent:"center", transition:"all 0.2s ease", opacity:status==="occupied"?0.3:1 }}>
+                      <WrenchIcon size={13}/>
+                    </button>
                   </div>
                 </div>
               );
@@ -422,17 +281,13 @@
           </div>
 
           {log.length > 0 && (
-            <div style={{ maxWidth: "480px", margin: "0 auto" }}>
-              <div style={{ fontSize: "10px", letterSpacing: "0.18em", color: "rgba(255,255,255,0.2)", textTransform: "uppercase", marginBottom: "8px" }}>Recent Activity</div>
+            <div style={{ maxWidth:"480px", margin:"0 auto" }}>
+              <div style={{ fontSize:"10px", letterSpacing:"0.18em", color:"rgba(255,255,255,0.2)", textTransform:"uppercase", marginBottom:"8px" }}>Recent Activity</div>
               {log.map((entry, i) => (
-                <div key={i} style={{
-                  display: "flex", alignItems: "center", gap: "8px", padding: "7px 11px", marginBottom: "4px",
-                  background: "rgba(255,255,255,0.025)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.05)",
-                  opacity: 1 - i * 0.16,
-                }}>
+                <div key={i} style={{ display:"flex", alignItems:"center", gap:"8px", padding:"7px 11px", marginBottom:"4px", background:"rgba(255,255,255,0.025)", borderRadius:"8px", border:"1px solid rgba(255,255,255,0.05)", opacity:1-i*0.16 }}>
                   <SlackIcon />
-                  <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.45)", flex: 1 }}>{entry.msg}</span>
-                  <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.18)", whiteSpace: "nowrap" }}>{entry.time}</span>
+                  <span style={{ fontSize:"11px", color:"rgba(255,255,255,0.45)", flex:1 }}>{entry.msg}</span>
+                  <span style={{ fontSize:"10px", color:"rgba(255,255,255,0.18)", whiteSpace:"nowrap" }}>{entry.time}</span>
                 </div>
               ))}
             </div>
@@ -444,78 +299,91 @@
     // ─── Root ─────────────────────────────────────────────────────────────────
     function App() {
       const urlChargerId = getChargerFromURL();
-      const [view, setView] = useState(() => {
-        // If URL has ?charger=CHG-001, go directly to that charger's name entry
-        if (urlChargerId && CHARGERS.find(c => c.id === urlChargerId)) {
-          return { type: "name", chargerId: urlChargerId };
-        }
-        return "dashboard";
-      });
+      const [view, setView] = useState("loading");
+      const [states, setStates] = useState({});
       const [log, setLog] = useState([]);
-      const [states, setStates] = useState(() =>
-        Object.fromEntries(CHARGERS.map(c => [c.id, { status: "available", startTime: null, elapsed: 0, userName: null }]))
-      );
+
+      // Poll state from Redis every 5 seconds
+      const loadState = useCallback(async () => {
+        try {
+          const data = await fetchState();
+          setStates(data);
+          if (view === "loading") {
+            if (urlChargerId && CHARGERS.find(c => c.id === urlChargerId)) {
+              const status = data[urlChargerId]?.status;
+              if (status === "fault")          setView({ type:"fault",    chargerId:urlChargerId });
+              else if (status === "occupied")  setView({ type:"charging", chargerId:urlChargerId });
+              else                             setView({ type:"name",     chargerId:urlChargerId });
+            } else {
+              setView("dashboard");
+            }
+          }
+        } catch (e) { console.error(e); }
+      }, []);
 
       useEffect(() => {
-        const interval = setInterval(() => {
-          setStates(prev => {
-            const next = { ...prev };
-            for (const id of Object.keys(next)) {
-              if (next[id].status === "occupied" && next[id].startTime) {
-                next[id] = { ...next[id], elapsed: Math.floor((Date.now() - next[id].startTime) / 1000) };
-              }
-            }
-            return next;
-          });
-        }, 1000);
+        loadState();
+        const interval = setInterval(loadState, 5000);
         return () => clearInterval(interval);
       }, []);
 
       const addLog = (msg) => setLog(prev => [{ msg, time: new Date().toLocaleTimeString() }, ...prev.slice(0, 6)]);
 
       const handleSelectCharger = (id) => {
-        const status = states[id].status;
-        if (status === "fault")          setView({ type: "fault",    chargerId: id });
-        else if (status === "available") setView({ type: "name",     chargerId: id });
-        else                             setView({ type: "charging", chargerId: id });
+        const status = states[id]?.status;
+        if (status === "fault")          setView({ type:"fault",    chargerId:id });
+        else if (status === "available") setView({ type:"name",     chargerId:id });
+        else                             setView({ type:"charging", chargerId:id });
       };
 
       const handleToggleFault = async (id) => {
         const label = CHARGERS.find(c => c.id === id)?.label;
-        const current = states[id].status;
+        const current = states[id]?.status;
         if (current === "occupied") return;
-        if (current === "fault") {
-          setStates(prev => ({ ...prev, [id]: { ...prev[id], status: "available" } }));
-          await sendSlack(`🔧 *${label}* (${id}) fault resolved — Status: 🟢 Available`);
-          addLog(`${label} fault resolved · Slack notified`);
-        } else {
-          setStates(prev => ({ ...prev, [id]: { ...prev[id], status: "fault" } }));
+        const newStatus = current === "fault" ? "available" : "fault";
+        const newStates = await updateState(id, newStatus);
+        setStates(newStates);
+        if (newStatus === "fault") {
           await sendSlack(`🚨 *${label}* (${id}) reported as faulty — Status: ⛔ Out of Service`);
           addLog(`${label} fault reported · Slack notified`);
+        } else {
+          await sendSlack(`🔧 *${label}* (${id}) fault resolved — Status: 🟢 Available`);
+          addLog(`${label} fault resolved · Slack notified`);
         }
       };
 
       const handleNameConfirm = async (id, name) => {
         const label = CHARGERS.find(c => c.id === id)?.label;
-        setStates(prev => ({ ...prev, [id]: { status: "occupied", startTime: Date.now(), elapsed: 0, userName: name } }));
-        setView({ type: "charging", chargerId: id });
+        const newStates = await updateState(id, "occupied", name);
+        setStates(newStates);
+        setView({ type:"charging", chargerId:id });
         await sendSlack(`⚡ *${name}* started charging at *${label}* (${id}). Status: 🔴 Occupied`);
         addLog(`${name} · ${label} started · Slack notified`);
       };
 
       const handleDone = async (id) => {
         const label = CHARGERS.find(c => c.id === id)?.label;
-        const { elapsed, userName } = states[id];
-        const duration = formatTime(elapsed);
-        setStates(prev => ({ ...prev, [id]: { status: "available", startTime: null, elapsed: 0, userName: null } }));
+        const { startTime, userName } = states[id];
+        const duration = formatTime(getElapsed(startTime));
+        const newStates = await updateState(id, "available");
+        setStates(newStates);
         setView("dashboard");
         await sendSlack(`✅ *${userName}* finished charging at *${label}* (${id}) after ${duration}. Status: 🟢 Available`);
         addLog(`${userName} · ${label} freed (${duration}) · Slack notified`);
       };
 
-      if (view === "dashboard") {
-        return <Dashboard chargerStates={states} onSelect={handleSelectCharger} onToggleFault={handleToggleFault} log={log} />;
+      if (view === "loading") {
+        return (
+          <div style={{ minHeight:"100vh", background:"#050a08", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'DM Mono', monospace", color:"rgba(255,255,255,0.3)", fontSize:"13px", letterSpacing:"0.1em" }}>
+            Loading...
+          </div>
+        );
       }
+
+      if (view === "dashboard") {
+        return <Dashboard states={states} onSelect={handleSelectCharger} onToggleFault={handleToggleFault} log={log} />;
+      }
+
       const charger = CHARGERS.find(c => c.id === view.chargerId);
       if (view.type === "fault")    return <OutOfServiceView charger={charger} onBack={() => setView("dashboard")} />;
       if (view.type === "name")     return <NameEntry charger={charger} onConfirm={(name) => handleNameConfirm(view.chargerId, name)} />;
