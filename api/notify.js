@@ -15,13 +15,18 @@ export default async function handler(req, res) {
     const response = await fetch(process.env.SLACK_WEBHOOK_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ payload: { message: message } }),
+      body: JSON.stringify({
+        payload: JSON.stringify({ message: message })
+      }),
     });
 
-    if (!response.ok) throw new Error(`Slack error: ${response.status}`);
+    const text = await response.text();
+    console.log("Slack response:", response.status, text);
+
+    if (!response.ok) throw new Error(`Slack error: ${response.status} ${text}`);
     return res.status(200).json({ ok: true });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ error: "Failed to send Slack notification" });
+    return res.status(500).json({ error: err.message });
   }
 }
