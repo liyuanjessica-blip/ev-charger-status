@@ -6,19 +6,28 @@ async function redisGet(key) {
     headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
   });
   const data = await res.json();
-  if (!data.result) return null;
+  console.log("redisGet raw:", JSON.stringify(data));
+  if (!data.result) {
+    console.log("redisGet: no result, returning null");
+    return null;
+  }
   const parsed = JSON.parse(data.result);
-  // If chargers missing, treat as null so DEFAULT_STATE kicks in
-  if (!parsed["CHG-001"]) return null;
+  console.log("redisGet parsed:", JSON.stringify(parsed));
+  if (!parsed["CHG-001"]) {
+    console.log("redisGet: CHG-001 missing, returning null");
+    return null;
+  }
   return parsed;
 }
 
 async function redisSet(key, value) {
-  // EX 2592000 = expire after 30 days, refreshed on every write
-  await fetch(`${REDIS_URL}/set/${key}?EX=2592000`, {
+  // Upstash REST pipeline: SET with EX 2592000 (30 days)
+  await fetch(`${REDIS_URL}/pipeline`, {
     method: "POST",
     headers: { Authorization: `Bearer ${REDIS_TOKEN}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ value: JSON.stringify(value) }),
+    body: JSON.stringify([
+      ["SET", key, JSON.stringify(value), "EX", 2592000]
+    ]),
   });
 }
 
