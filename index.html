@@ -22,7 +22,7 @@
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    const { useState, useEffect, useCallback } = React;
+    const { useState, useEffect } = React;
 
     const CHARGERS = [
       { id: "CHG-001", label: "Charger 1" },
@@ -303,12 +303,12 @@
       const [states, setStates] = useState({});
       const [log, setLog] = useState([]);
 
-      // Poll state from Redis every 5 seconds
-      const loadState = useCallback(async () => {
-        try {
-          const data = await fetchState();
-          setStates(data);
-          if (view === "loading") {
+      // Initial load — run once on mount
+      useEffect(() => {
+        async function initialLoad() {
+          try {
+            const data = await fetchState();
+            setStates(data);
             if (urlChargerId && CHARGERS.find(c => c.id === urlChargerId)) {
               const status = data[urlChargerId]?.status;
               if (status === "fault")          setView({ type:"fault",    chargerId:urlChargerId });
@@ -317,13 +317,19 @@
             } else {
               setView("dashboard");
             }
-          }
-        } catch (e) { console.error(e); }
+          } catch (e) { console.error(e); }
+        }
+        initialLoad();
       }, []);
 
+      // Poll state every 5 seconds — only update data, never change view
       useEffect(() => {
-        loadState();
-        const interval = setInterval(loadState, 5000);
+        const interval = setInterval(async () => {
+          try {
+            const data = await fetchState();
+            setStates(data);
+          } catch (e) { console.error(e); }
+        }, 5000);
         return () => clearInterval(interval);
       }, []);
 
