@@ -33,7 +33,7 @@
 
     // ─── API helpers ──────────────────────────────────────────────────────────
     async function fetchState() {
-      const res = await fetch("/api/state");
+      const res = await fetch("/api/state?t=" + Date.now());
       return res.json();
     }
 
@@ -312,7 +312,7 @@
             if (urlChargerId && CHARGERS.find(c => c.id === urlChargerId)) {
               const status = data[urlChargerId]?.status;
               if (status === "fault")          setView({ type:"fault",    chargerId:urlChargerId });
-              else if (status === "occupied")  setView({ type:"charging", chargerId:urlChargerId });
+              else if (status === "occupied")  setView({ type:"inuse",    chargerId:urlChargerId });
               else                             setView({ type:"name",     chargerId:urlChargerId });
             } else {
               setView("dashboard");
@@ -322,16 +322,7 @@
         initialLoad();
       }, []);
 
-      // Poll state every 5 seconds — only update data, never change view
-      useEffect(() => {
-        const interval = setInterval(async () => {
-          try {
-            const data = await fetchState();
-            setStates(data);
-          } catch (e) { console.error(e); }
-        }, 5000);
-        return () => clearInterval(interval);
-      }, []);
+
 
       const addLog = (msg) => setLog(prev => [{ msg, time: new Date().toLocaleTimeString() }, ...prev.slice(0, 6)]);
 
