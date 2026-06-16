@@ -321,12 +321,21 @@
             } else {
               setView("dashboard");
             }
-          } catch (e) { console.error(e); }
+          } catch (e) {
+            console.error(e);
+            setView(urlChargerId ? "dashboard" : "dashboard");
+          }
         }
         initialLoad();
       }, []);
 
-
+      // Fallback: if still loading after 5s (e.g. API error), go to dashboard
+      useEffect(() => {
+        const timeout = setTimeout(() => {
+          setView(prev => prev === "loading" ? "dashboard" : prev);
+        }, 5000);
+        return () => clearTimeout(timeout);
+      }, []);
 
       const addLog = (msg) => setLog(prev => [{ msg, time: new Date().toLocaleTimeString() }, ...prev.slice(0, 6)]);
 
