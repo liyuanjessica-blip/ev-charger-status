@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>EV Charger</title>
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #050a08; }
@@ -21,6 +21,29 @@
 </head>
 <body>
   <div id="root"></div>
+  <div id="error-box" style="display:none; position:fixed; top:0; left:0; right:0; background:#ff3c3c; color:white; padding:16px; font-family:monospace; font-size:13px; white-space:pre-wrap; z-index:9999; max-height:70vh; overflow:auto;"></div>
+  <script>
+    window.onerror = function(msg, src, line, col, err) {
+      var box = document.getElementById("error-box");
+      box.style.display = "block";
+      box.textContent = "ERROR: " + msg + "\nLine " + line + ":" + col + "\n\n" + (err && err.stack ? err.stack : "");
+      return false;
+    };
+    window.addEventListener("unhandledrejection", function(e) {
+      var box = document.getElementById("error-box");
+      box.style.display = "block";
+      box.textContent = "PROMISE ERROR: " + (e.reason && e.reason.message ? e.reason.message : e.reason);
+    });
+    window.addEventListener("load", function() {
+      setTimeout(function() {
+        if (typeof React === "undefined") {
+          var box = document.getElementById("error-box");
+          box.style.display = "block";
+          box.textContent = "ERROR: React failed to load from CDN. The CDN may be blocked by your company network or is down.";
+        }
+      }, 2000);
+    });
+  </script>
   <script type="text/babel">
     const { useState, useEffect } = React;
 
