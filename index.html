@@ -252,6 +252,7 @@
                     <span style={{ width:"7px", height:"7px", borderRadius:"50%", flexShrink:0, background:colors.dot, boxShadow:`0 0 8px ${colors.dot}`, animation:"blink 1.4s ease-in-out infinite" }} />
                   </div>
                   <div style={{ fontSize:"14px", fontWeight:"600", color:"rgba(255,255,255,0.85)", marginBottom:"2px", letterSpacing:"0.03em" }}>{charger.label}</div>
+                  <div style={{ fontSize:"11px", color:"rgba(255,255,255,0.4)", marginBottom:"2px" }}>{charger.desc}</div>
                   <div style={{ fontSize:"10px", color:"rgba(255,255,255,0.22)", letterSpacing:"0.08em", marginBottom:"10px" }}>{charger.id}</div>
                   {status==="occupied" && (
                     <div style={{ marginBottom:"10px" }}>
@@ -315,7 +316,7 @@
             if (urlChargerId && CHARGERS.find(c => c.id === urlChargerId)) {
               const status = data[urlChargerId]?.status;
               if (status === "fault")          setView({ type:"fault",    chargerId:urlChargerId });
-              else if (status === "occupied")  setView({ type:"inuse",    chargerId:urlChargerId });
+              else if (status === "occupied")  setView({ type:"charging", chargerId:urlChargerId });
               else                             setView({ type:"name",     chargerId:urlChargerId });
             } else {
               setView("dashboard");
